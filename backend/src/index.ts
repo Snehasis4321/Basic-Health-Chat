@@ -7,6 +7,8 @@ import pool from './config/database.js';
 import { connectRedis } from './config/redis.js';
 import authRoutes from './routes/auth.js';
 import roomRoutes from './routes/rooms.js';
+import messageRoutes from './routes/messages.js';
+import { setupWebSocketServer } from './services/websocket.js';
 
 dotenv.config();
 
@@ -25,14 +27,18 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
+app.use('/api/rooms', messageRoutes);
 
 // Socket.io setup
 const io = new Server(httpServer, {
   cors: corsOptions,
 });
 
+// Set up WebSocket server with authentication and connection handling
+setupWebSocketServer(io);
+
 // Health check endpoint
-app.get('/health', async (req, res) => {
+app.get('/health', async (_req, res) => {
   try {
     // Check database connection
     await pool.query('SELECT 1');
@@ -54,17 +60,8 @@ app.get('/health', async (req, res) => {
 });
 
 // Basic route
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
   res.json({ message: 'Healthcare Chat Platform API' });
-});
-
-// Socket.io connection handling
-io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-  });
 });
 
 // Start server
