@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import pool from './config/database.js';
 import { connectRedis } from './config/redis.js';
 import authRoutes from './routes/auth.js';
+import roomRoutes from './routes/rooms.js';
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/rooms', roomRoutes);
 
 // Socket.io setup
 const io = new Server(httpServer, {
