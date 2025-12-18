@@ -42,14 +42,20 @@ export default function Home() {
               </div>
               <div className="space-y-3">
                 <Link
-                  href="/user/login"
+                  href="/patient/create-room"
                   className="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors text-center"
+                >
+                  Start Anonymous Chat
+                </Link>
+                <Link
+                  href="/user/login"
+                  className="block w-full py-3 px-4 border-2 border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 font-medium rounded-lg transition-colors text-center"
                 >
                   Login
                 </Link>
                 <Link
                   href="/user/register"
-                  className="block w-full py-3 px-4 border-2 border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 font-medium rounded-lg transition-colors text-center"
+                  className="block w-full py-3 px-4 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-center"
                 >
                   Register
                 </Link>
@@ -83,14 +89,20 @@ export default function Home() {
               </div>
               <div className="space-y-3">
                 <Link
-                  href="/doctor/login"
+                  href="/doctor/join-room"
                   className="block w-full py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors text-center"
+                >
+                  Join Patient Room
+                </Link>
+                <Link
+                  href="/doctor/login"
+                  className="block w-full py-3 px-4 border-2 border-green-600 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 font-medium rounded-lg transition-colors text-center"
                 >
                   Login
                 </Link>
                 <Link
                   href="/doctor/register"
-                  className="block w-full py-3 px-4 border-2 border-green-600 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 font-medium rounded-lg transition-colors text-center"
+                  className="block w-full py-3 px-4 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-center"
                 >
                   Register
                 </Link>

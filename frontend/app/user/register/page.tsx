@@ -14,7 +14,7 @@ export default function UserRegisterPage() {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated && isUser) {
-      router.push('/dashboard');
+      router.push('/patient/dashboard');
     }
   }, [isAuthenticated, isUser, router]);
 

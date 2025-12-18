@@ -13,13 +13,13 @@ export default function UserLoginPage() {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated && isUser) {
-      router.push('/dashboard');
+      router.push('/patient/dashboard');
     }
   }, [isAuthenticated, isUser, router]);
 
   const handleSuccess = (token: string, user: { id: string; email: string }) => {
     loginUser(token, user);
-    router.push('/dashboard');
+    router.push('/patient/dashboard');
   };
 
   return (
