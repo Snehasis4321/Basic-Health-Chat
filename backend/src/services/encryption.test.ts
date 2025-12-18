@@ -2,10 +2,10 @@ import { generateCipherKey, encryptMessage, decryptMessage } from './encryption.
 
 describe('Encryption Service', () => {
   describe('generateCipherKey', () => {
-    it('should generate a 64-character hex string (32 bytes)', () => {
+    it('should generate a 44-character base64 string (32 bytes)', () => {
       const key = generateCipherKey();
-      expect(key).toHaveLength(64);
-      expect(key).toMatch(/^[0-9a-f]{64}$/);
+      expect(key).toHaveLength(44);
+      expect(key).toMatch(/^[A-Za-z0-9+/]{43}=$/);
     });
 
     it('should generate unique keys', () => {

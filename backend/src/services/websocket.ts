@@ -428,15 +428,29 @@ export function setupWebSocketServer(io: Server): void {
           return;
         }
         
+        // DEBUG: Save audio to file for verification
+        const fs = await import('fs');
+        const path = await import('path');
+        const debugDir = path.join(process.cwd(), 'debug-audio');
+        if (!fs.existsSync(debugDir)) {
+          fs.mkdirSync(debugDir, { recursive: true });
+        }
+        const debugFilename = `tts-${messageId || Date.now()}-${targetLanguage}.mp3`;
+        const debugPath = path.join(debugDir, debugFilename);
+        fs.writeFileSync(debugPath, audioBuffer);
+        console.log(`[TTS] DEBUG: Saved audio to ${debugPath} (${audioBuffer.length} bytes)`);
+        
         // Stream audio to the requesting client
+        console.log(`[TTS] Starting to stream audio for message ${messageId}, buffer size: ${audioBuffer.length} bytes`);
         await ttsService.streamAudio(audioBuffer, (event, data) => {
+          console.log(`[TTS] Emitting ${event} event with messageId: ${messageId}, chunk ${data.index + 1}/${data.total}`);
           socket.emit(event, {
             ...data,
             messageId,
           });
         });
         
-        console.log(`TTS audio streamed to ${session.role} in room ${session.roomId}`);
+        console.log(`[TTS] Audio streaming complete for ${session.role} in room ${session.roomId}`);
       } catch (error) {
         console.error('Error handling TTS request:', error);
         socket.emit('error', { 

@@ -43,8 +43,12 @@ export class TranslationService {
         : `Translate this text to ${targetLanguage}: ${content}`;
       
       // Call OpenAI API
+      // Using gpt-4o-mini for optimal balance of cost, speed, and quality
+      // - 70% cheaper than gpt-3.5-turbo ($0.15 vs $0.50 per 1M tokens)
+      // - Faster response time for real-time chat
+      // - Better translation quality, especially for medical terminology
       const response = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },

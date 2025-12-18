@@ -12,6 +12,7 @@ interface UseWebSocketOptions {
   onUserJoined?: (data: any) => void;
   onUserLeft?: (data: any) => void;
   onNewMessage?: (data: any) => void;
+  onMessageSent?: (data: any) => void;
   onMessageTranslated?: (data: any) => void;
   onCipherKeyExchange?: (data: any) => void;
   onCipherKeyInvalidated?: (data: any) => void;
@@ -42,6 +43,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     onUserJoined,
     onUserLeft,
     onNewMessage,
+    onMessageSent,
     onMessageTranslated,
     onCipherKeyExchange,
     onCipherKeyInvalidated,
@@ -63,6 +65,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     onUserJoined,
     onUserLeft,
     onNewMessage,
+    onMessageSent,
     onMessageTranslated,
     onCipherKeyExchange,
     onCipherKeyInvalidated,
@@ -76,12 +79,13 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
       onUserJoined,
       onUserLeft,
       onNewMessage,
+      onMessageSent,
       onMessageTranslated,
       onCipherKeyExchange,
       onCipherKeyInvalidated,
       onError,
     };
-  }, [onRoomJoined, onUserJoined, onUserLeft, onNewMessage, onMessageTranslated, onCipherKeyExchange, onCipherKeyInvalidated, onError]);
+  }, [onRoomJoined, onUserJoined, onUserLeft, onNewMessage, onMessageSent, onMessageTranslated, onCipherKeyExchange, onCipherKeyInvalidated, onError]);
 
   // Initialize socket connection
   const initializeSocket = useCallback(() => {
@@ -171,6 +175,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
 
     newSocket.on('message_sent', (data) => {
       console.log('Message sent confirmation:', data);
+      callbacksRef.current.onMessageSent?.(data);
     });
 
     // Cipher key event handlers
@@ -201,7 +206,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
 
     newSocket.on('tts_error', (data) => {
       console.error('TTS error:', data);
-      setError(data.message || 'Text-to-speech generation failed');
+      // Don't set global error for TTS failures, let the component handle it
       callbacksRef.current.onError?.(data);
     });
 

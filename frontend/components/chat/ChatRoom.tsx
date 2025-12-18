@@ -28,15 +28,25 @@ interface Message {
 }
 
 export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps) {
-  // Initialize language from session storage or default to 'en'
-  const [language, setLanguage] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('preferredLanguage') || 'en';
-    }
-    return 'en';
-  });
+  // Initialize language with default value to avoid hydration mismatch
+  const [language, setLanguage] = useState('en');
   const [cipherKey, setCipherKey] = useState<string | null>(null);
   const [dismissedError, setDismissedError] = useState(false);
+  const [participants, setParticipants] = useState<{
+    patient: boolean;
+    doctor: boolean;
+  }>({
+    patient: false,
+    doctor: false,
+  });
+
+  // Load language from session storage after mount to avoid hydration mismatch
+  useEffect(() => {
+    const storedLanguage = sessionStorage.getItem('preferredLanguage');
+    if (storedLanguage) {
+      setLanguage(storedLanguage);
+    }
+  }, []);
 
   // Fetch messages with lazy loading support
   const {
@@ -68,12 +78,31 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
     language,
     onRoomJoined: (data) => {
       console.log('Room joined:', data);
+      // Update participant status when we join
+      setParticipants((prev) => ({
+        ...prev,
+        [role]: true,
+      }));
     },
     onUserJoined: (data) => {
       console.log('User joined:', data);
+      // Update participant status when another user joins
+      if (data.role) {
+        setParticipants((prev) => ({
+          ...prev,
+          [data.role]: true,
+        }));
+      }
     },
     onUserLeft: (data) => {
       console.log('User left:', data);
+      // Update participant status when a user leaves
+      if (data.role) {
+        setParticipants((prev) => ({
+          ...prev,
+          [data.role]: false,
+        }));
+      }
     },
     onNewMessage: (data) => {
       console.log('New message:', data);
@@ -91,6 +120,10 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
         isAudio: data.isAudio || false,
       };
       addMessage(newMessage);
+    },
+    onMessageSent: (data) => {
+      console.log('Message sent confirmation:', data);
+      // Message was already added optimistically, confirmation received
     },
     onMessageTranslated: (data) => {
       console.log('Message translated:', data);
@@ -146,6 +179,20 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
       console.error('Cannot send message: not connected');
       return;
     }
+    
+    // Add message optimistically to UI
+    const tempMessage: Message = {
+      id: `temp-${Date.now()}`,
+      roomId: roomId,
+      senderRole: role,
+      senderId: null, // Will be set by server for doctors
+      content: content,
+      language: language,
+      timestamp: new Date(),
+      isAudio: false,
+    };
+    addMessage(tempMessage);
+    
     sendMessage(content, language);
   };
 
@@ -169,33 +216,7 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
     }
   };
 
-  const handleRequestTTS = (messageId: string, text: string, ttsLanguage: string) => {
-    if (!connected || !socket) {
-      console.error('Cannot request TTS: not connected');
-      return;
-    }
 
-    // Request TTS generation from server
-    socket.emit('request_tts', {
-      messageId,
-      text,
-      language: ttsLanguage,
-    });
-
-    // Listen for audio stream response
-    socket.once('audio_stream', (data: { messageId: string; audio: ArrayBuffer }) => {
-      if (data.messageId === messageId) {
-        // Convert array buffer to blob
-        const audioBlob = new Blob([data.audio], { type: 'audio/mpeg' });
-        
-        // Load audio into the player
-        const player = (window as any)[`audioPlayer_${messageId}`];
-        if (player && player.loadAudio) {
-          player.loadAudio(audioBlob);
-        }
-      }
-    });
-  };
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
@@ -213,6 +234,17 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
             <div className="hidden sm:flex items-center gap-2">
               <span className="text-sm text-gray-600 dark:text-gray-400">Room:</span>
               <span className="text-sm font-mono text-gray-900 dark:text-white">{roomId.slice(0, 8)}...</span>
+            </div>
+            <div className="hidden sm:block h-4 w-px bg-gray-300 dark:bg-gray-600"></div>
+            <div className="hidden sm:flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <div className={`w-2 h-2 rounded-full ${participants.patient ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                <span className="text-xs text-gray-600 dark:text-gray-400">Patient</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className={`w-2 h-2 rounded-full ${participants.doctor ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                <span className="text-xs text-gray-600 dark:text-gray-400">Doctor</span>
+              </div>
             </div>
           </div>
 
@@ -242,10 +274,22 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
           </div>
         </div>
 
-        {/* Mobile Room ID */}
-        <div className="sm:hidden mt-2 flex items-center gap-2">
-          <span className="text-xs text-gray-600 dark:text-gray-400">Room:</span>
-          <span className="text-xs font-mono text-gray-900 dark:text-white">{roomId}</span>
+        {/* Mobile Room ID and Participants */}
+        <div className="sm:hidden mt-2 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-600 dark:text-gray-400">Room:</span>
+            <span className="text-xs font-mono text-gray-900 dark:text-white">{roomId}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full ${participants.patient ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+              <span className="text-xs text-gray-600 dark:text-gray-400">Patient</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full ${participants.doctor ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+              <span className="text-xs text-gray-600 dark:text-gray-400">Doctor</span>
+            </div>
+          </div>
         </div>
 
         {/* Error Banner */}
@@ -303,7 +347,6 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
             messages={messages}
             currentRole={role}
             onLoadMore={loadMore}
-            onRequestTTS={handleRequestTTS}
             loading={messagesLoading}
             hasMore={hasMore}
           />

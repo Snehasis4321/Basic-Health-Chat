@@ -6,17 +6,18 @@ interface AudioPlayerProps {
   messageId: string;
   text: string;
   language?: string;
-  onRequestTTS: (messageId: string, text: string, language: string) => void;
+  onRequestTTS?: (messageId: string, text: string, language: string) => void;
   onError?: (error: string) => void;
   disabled?: boolean;
   size?: 'sm' | 'md';
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
 export default function AudioPlayer({
   messageId,
   text,
   language = 'en',
-  onRequestTTS,
   onError,
   disabled = false,
   size = 'md',
@@ -28,110 +29,143 @@ export default function AudioPlayer({
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Create audio element
-  useEffect(() => {
-    audioRef.current = new Audio();
-    
-    audioRef.current.onended = () => {
-      setIsPlaying(false);
-    };
-    
-    audioRef.current.onerror = () => {
-      setError('Failed to play audio');
-      setIsPlaying(false);
-      setIsLoading(false);
-      onError?.('Failed to play audio');
-    };
+  // Create audio element lazily (only when needed)
+  const getAudioElement = useCallback(() => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+      
+      audioRef.current.onended = () => {
+        setIsPlaying(false);
+      };
+      
+      audioRef.current.oncanplaythrough = () => {
+        console.log('[AudioPlayer] Audio can play through');
+      };
+    }
+    return audioRef.current;
+  }, []);
 
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = '';
+        audioRef.current = null;
       }
     };
-  }, [onError]);
+  }, []);
 
-  // Update audio source when URL changes
-  useEffect(() => {
-    if (audioRef.current && audioUrl) {
-      audioRef.current.src = audioUrl;
+  // Fetch TTS audio from backend
+  const fetchTTSAudio = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log(`[AudioPlayer] Fetching TTS for: "${text.substring(0, 50)}..." in ${language}`);
+      
+      const response = await fetch(`${API_URL}/api/tts/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text, language }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success || !data.audioUrl) {
+        throw new Error('Invalid response from TTS service');
+      }
+
+      // Construct full URL
+      const fullAudioUrl = `${API_URL}${data.audioUrl}`;
+      console.log(`[AudioPlayer] Got audio URL: ${fullAudioUrl} (cached: ${data.cached})`);
+      
+      setAudioUrl(fullAudioUrl);
+      setIsLoading(false);
+      
+      // Auto-play
+      const audio = getAudioElement();
+      audio.src = fullAudioUrl;
+      
+      // Set up error handler for this specific load
+      audio.onerror = () => {
+        console.error('[AudioPlayer] Audio load/play error');
+        setError('Failed to play audio');
+        setIsPlaying(false);
+        setIsLoading(false);
+        onError?.('Failed to play audio');
+      };
+      
+      try {
+        await audio.play();
+        setIsPlaying(true);
+        console.log('[AudioPlayer] Audio playing');
+      } catch (playError) {
+        console.error('[AudioPlayer] Play error:', playError);
+        // Don't set error - user can click again to play
+        setIsPlaying(false);
+      }
+    } catch (err) {
+      console.error('[AudioPlayer] Error fetching TTS:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate audio';
+      setError(errorMessage);
+      setIsLoading(false);
+      onError?.(errorMessage);
     }
-  }, [audioUrl]);
+  }, [text, language, onError, getAudioElement]);
 
   const handlePlay = useCallback(async () => {
     if (isLoading || disabled) return;
 
     try {
       // If we already have audio loaded, just play/pause
-      if (audioUrl && audioRef.current) {
+      if (audioUrl) {
+        const audio = getAudioElement();
         if (isPlaying) {
-          audioRef.current.pause();
+          console.log(`[AudioPlayer] Pausing audio`);
+          audio.pause();
           setIsPlaying(false);
         } else {
-          await audioRef.current.play();
+          console.log(`[AudioPlayer] Resuming audio`);
+          await audio.play();
           setIsPlaying(true);
         }
         return;
       }
 
-      // Otherwise, request TTS generation
-      setIsLoading(true);
-      setError(null);
-      onRequestTTS(messageId, text, language);
-
+      // Otherwise, fetch TTS audio
+      await fetchTTSAudio();
     } catch (err) {
-      console.error('Error playing audio:', err);
+      console.error('[AudioPlayer] Error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to play audio';
       setError(errorMessage);
       onError?.(errorMessage);
       setIsPlaying(false);
       setIsLoading(false);
     }
-  }, [audioUrl, isPlaying, isLoading, disabled, messageId, text, language, onRequestTTS, onError]);
+  }, [audioUrl, isPlaying, isLoading, disabled, fetchTTSAudio, onError]);
 
   const handleStop = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
       setIsPlaying(false);
     }
   }, []);
 
-  // Public method to receive audio data from parent
-  const loadAudio = useCallback((audioBlob: Blob) => {
-    try {
-      const url = URL.createObjectURL(audioBlob);
-      setAudioUrl(url);
-      setIsLoading(false);
-      
-      // Auto-play after loading
-      if (audioRef.current) {
-        audioRef.current.src = url;
-        audioRef.current.play().then(() => {
-          setIsPlaying(true);
-        }).catch((err) => {
-          console.error('Error auto-playing audio:', err);
-          setError('Failed to play audio');
-          onError?.('Failed to play audio');
-        });
-      }
-    } catch (err) {
-      console.error('Error loading audio:', err);
-      setError('Failed to load audio');
-      setIsLoading(false);
-      onError?.('Failed to load audio');
-    }
-  }, [onError]);
-
-  // Expose loadAudio method via ref (if needed by parent)
-  useEffect(() => {
-    // Store reference for parent component access if needed
-    (window as any)[`audioPlayer_${messageId}`] = { loadAudio };
-    
-    return () => {
-      delete (window as any)[`audioPlayer_${messageId}`];
-    };
-  }, [messageId, loadAudio]);
+  const handleRetry = useCallback(() => {
+    setError(null);
+    setAudioUrl(null);
+    fetchTTSAudio();
+  }, [fetchTTSAudio]);
 
   const iconSize = size === 'sm' ? 'w-4 h-4' : 'w-5 h-5';
   const buttonSize = size === 'sm' ? 'p-1.5' : 'p-2';
@@ -139,7 +173,7 @@ export default function AudioPlayer({
   if (error) {
     return (
       <button
-        onClick={handlePlay}
+        onClick={handleRetry}
         disabled={disabled}
         className={`${buttonSize} bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
         aria-label="Retry audio playback"

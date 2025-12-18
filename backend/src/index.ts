@@ -3,11 +3,13 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import pool from './config/database.js';
 import { connectRedis } from './config/redis.js';
 import authRoutes from './routes/auth.js';
 import roomRoutes from './routes/rooms.js';
 import messageRoutes from './routes/messages.js';
+import ttsRoutes from './routes/tts.js';
 import { setupWebSocketServer } from './services/websocket.js';
 
 dotenv.config();
@@ -24,10 +26,14 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
+// Serve static files for TTS audio
+app.use('/tts-audio', express.static(path.join(process.cwd(), 'public', 'tts-audio')));
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/rooms', messageRoutes);
+app.use('/api/tts', ttsRoutes);
 
 // Socket.io setup
 const io = new Server(httpServer, {

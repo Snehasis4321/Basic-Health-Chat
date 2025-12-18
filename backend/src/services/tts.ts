@@ -79,19 +79,26 @@ export class TTSService {
   
   /**
    * Map language code to OpenAI voice
+   * OpenAI voices are multilingual and work with all languages
    * @param language - Language code
    * @returns OpenAI voice name
    */
   private getVoiceForLanguage(language: string): 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer' {
-    // For now, use a simple mapping
-    // In production, you might want more sophisticated voice selection
+    // Map languages to voices with variety
+    // All OpenAI voices are multilingual and support all languages
     const voiceMap: Record<string, 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer'> = {
-      'en': 'alloy',
-      'es': 'nova',
-      'fr': 'shimmer',
-      'de': 'onyx',
-      'it': 'echo',
-      'pt': 'fable',
+      'en': 'alloy',      // English - neutral
+      'es': 'nova',       // Spanish - warm
+      'fr': 'shimmer',    // French - soft
+      'de': 'onyx',       // German - deep
+      'it': 'echo',       // Italian - clear
+      'pt': 'fable',      // Portuguese - expressive
+      'zh': 'alloy',      // Chinese - neutral
+      'ja': 'shimmer',    // Japanese - soft
+      'ko': 'nova',       // Korean - warm
+      'ru': 'onyx',       // Russian - deep
+      'ar': 'fable',      // Arabic - expressive
+      'hi': 'echo',       // Hindi - clear
     };
     
     return voiceMap[language] || 'alloy';

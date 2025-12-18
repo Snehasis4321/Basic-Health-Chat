@@ -19,7 +19,7 @@ interface MessageListProps {
   messages: Message[];
   currentRole: 'patient' | 'doctor';
   onLoadMore?: () => void;
-  onRequestTTS?: (messageId: string, text: string, language: string) => void;
+  onRequestTTS?: (messageId: string, text: string, language: string) => void; // Deprecated - AudioPlayer handles TTS internally
   loading?: boolean;
   hasMore?: boolean;
 }
@@ -28,7 +28,6 @@ export default function MessageList({
   messages,
   currentRole,
   onLoadMore,
-  onRequestTTS,
   loading = false,
   hasMore = false,
 }: MessageListProps) {
@@ -237,58 +236,77 @@ export default function MessageList({
                     : getRoleColor(message.senderRole)
                 }`}
               >
-                {/* Translated text (primary display) */}
-                <div className="flex items-start gap-2">
-                  <div className="flex-1">
-                    {message.translatedContent && message.content !== message.translatedContent && (
-                      <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                        Translated ({message.targetLanguage || 'auto'}):
+                {/* Check if we have both original and translated content */}
+                {message.translatedContent && message.content !== message.translatedContent ? (
+                  <div className="space-y-3">
+                    {/* Translated text section */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                          </svg>
+                          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">
+                            Translated ({message.targetLanguage || 'auto'})
+                          </span>
+                        </div>
+                        {/* Audio Player Button for translated text */}
+                        <AudioPlayer
+                          messageId={message.id}
+                          text={message.translatedContent}
+                          language={message.targetLanguage || message.language}
+                          size="sm"
+                        />
+                      </div>
+                      <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words leading-relaxed">
+                        {message.translatedContent}
                       </p>
-                    )}
-                    <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words">
+                    </div>
+
+                    {/* Divider */}
+                    <div className="border-t border-gray-300/50 dark:border-gray-600/50"></div>
+
+                    {/* Original text section */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                          </svg>
+                          <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">
+                            Original ({message.language})
+                          </span>
+                        </div>
+                        {/* Audio Player Button for original text */}
+                        <AudioPlayer
+                          messageId={`${message.id}-original`}
+                          text={message.content}
+                          language={message.language}
+                          size="sm"
+                        />
+                      </div>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed opacity-90">
+                        {message.content}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  /* Single language message (no translation) */
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words leading-relaxed flex-1">
                       {displayContent}
                     </p>
-                  </div>
-                  
-                  {/* Audio Player Button for translated text */}
-                  {onRequestTTS && (
-                    <AudioPlayer
-                      messageId={message.id}
-                      text={displayContent}
-                      language={message.targetLanguage || message.language}
-                      onRequestTTS={onRequestTTS}
-                      size="sm"
-                    />
-                  )}
-                </div>
-
-                {/* Show original text if different from translation */}
-                {message.translatedContent &&
-                  message.content !== message.translatedContent && (
-                    <div className="mt-3 pt-3 border-t border-gray-300/50 dark:border-gray-600/50">
-                      <div className="flex items-start gap-2">
-                        <div className="flex-1">
-                          <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                            Original ({message.language}):
-                          </p>
-                          <p className="text-xs text-gray-700 dark:text-gray-300 italic whitespace-pre-wrap break-words">
-                            {message.content}
-                          </p>
-                        </div>
-                        
-                        {/* Audio Player Button for original text */}
-                        {onRequestTTS && (
-                          <AudioPlayer
-                            messageId={`${message.id}-original`}
-                            text={message.content}
-                            language={message.language}
-                            onRequestTTS={onRequestTTS}
-                            size="sm"
-                          />
-                        )}
-                      </div>
+                    {/* Audio Player Button */}
+                    <div className="flex-shrink-0 pt-0.5">
+                      <AudioPlayer
+                        messageId={message.id}
+                        text={displayContent}
+                        language={message.language}
+                        size="sm"
+                      />
                     </div>
-                  )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
