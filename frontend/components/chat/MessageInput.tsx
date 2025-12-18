@@ -104,15 +104,11 @@ export default function MessageInput({
         <AudioRecorder
           onTranscription={handleTranscription}
           onError={handleAudioError}
+          onCancel={toggleRecorder}
           disabled={disabled || sending}
           language={language}
+          autoStart={true}
         />
-        <button
-          onClick={toggleRecorder}
-          className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-        >
-          Cancel and switch to text input
-        </button>
       </div>
     );
   }

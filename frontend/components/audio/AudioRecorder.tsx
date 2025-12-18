@@ -1,21 +1,25 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 interface AudioRecorderProps {
   onAudioData?: (audioBlob: Blob) => void;
   onTranscription?: (text: string) => void;
   onError?: (error: string) => void;
+  onCancel?: () => void;
   disabled?: boolean;
   language?: string;
+  autoStart?: boolean;
 }
 
 export default function AudioRecorder({
   onAudioData,
   onTranscription,
   onError,
+  onCancel,
   disabled = false,
   language,
+  autoStart = false,
 }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -25,6 +29,7 @@ export default function AudioRecorder({
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const hasAutoStartedRef = useRef(false);
 
   const transcribeAudio = useCallback(async (audioBlob: Blob) => {
     setIsTranscribing(true);
@@ -180,13 +185,24 @@ export default function AudioRecorder({
         streamRef.current = null;
       }
     }
-  }, [isRecording]);
+    
+    // Call parent cancel handler to hide the recorder
+    onCancel?.();
+  }, [isRecording, onCancel]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Auto-start recording if autoStart prop is true
+  useEffect(() => {
+    if (autoStart && !hasAutoStartedRef.current && !isRecording && !disabled) {
+      hasAutoStartedRef.current = true;
+      startRecording();
+    }
+  }, [autoStart, isRecording, disabled, startRecording]);
 
   // Show transcribing state
   if (isTranscribing) {
@@ -223,22 +239,22 @@ export default function AudioRecorder({
 
   if (isRecording) {
     return (
-      <div className="flex items-center gap-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
-        {/* Recording indicator */}
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse"></div>
-          <span className="text-sm font-medium text-red-700 dark:text-red-300">
-            Recording
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
+        {/* Top row: Recording indicator and timer */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse"></div>
+            <span className="text-sm font-medium text-red-700 dark:text-red-300">
+              Recording
+            </span>
+          </div>
+          <span className="text-sm font-mono text-red-700 dark:text-red-300">
+            {formatTime(recordingTime)}
           </span>
         </div>
 
-        {/* Timer */}
-        <span className="text-sm font-mono text-red-700 dark:text-red-300">
-          {formatTime(recordingTime)}
-        </span>
-
         {/* Waveform visualization (simple bars) */}
-        <div className="flex items-center gap-1 flex-1">
+        <div className="flex items-center justify-center gap-1 mb-3 h-8">
           {[...Array(5)].map((_, i) => (
             <div
               key={i}
@@ -255,20 +271,20 @@ export default function AudioRecorder({
         <div className="flex items-center gap-2">
           <button
             onClick={cancelRecording}
-            className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
+            className="flex-1 px-3 py-2 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
             aria-label="Cancel recording"
           >
             Cancel
           </button>
           <button
             onClick={stopRecording}
-            className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center gap-2"
+            className="flex-1 px-3 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
             aria-label="Stop recording"
           >
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
               <rect x="6" y="6" width="12" height="12" rx="2" />
             </svg>
-            Stop
+            <span>Stop</span>
           </button>
         </div>
       </div>
