@@ -1,8 +1,10 @@
 import { Server, Socket } from 'socket.io';
 import { validateToken, JWTPayload } from './auth.js';
 import { exchangeKeys, leaveRoom as leaveRoomService } from './room.js';
-import { sendMessage as sendMessageService } from './message.js';
+import { sendMessage as sendMessageService, getMessages } from './message.js';
 import { translationService } from './translation.js';
+import { ttsService } from './tts.js';
+import { sttService } from './stt.js';
 
 export interface Session {
   socketId: string;
@@ -383,6 +385,244 @@ export function setupWebSocketServer(io: Server): void {
         console.error('Error sending message:', error);
         socket.emit('error', { 
           message: error instanceof Error ? error.message : 'Failed to send message' 
+        });
+      }
+    });
+    
+    // Handle request_tts event
+    socket.on('request_tts', async (data: {
+      text: string;
+      language?: string;
+      messageId?: string;
+    }) => {
+      try {
+        const session = getSession(socket.id);
+        
+        if (!session) {
+          socket.emit('error', { message: 'No active session found' });
+          return;
+        }
+        
+        const { text, language, messageId } = data;
+        
+        // Validate text
+        if (!text || text.trim().length === 0) {
+          socket.emit('error', { message: 'Text is required for TTS' });
+          return;
+        }
+        
+        // Use session language if not provided
+        const targetLanguage = language || session.language || 'en';
+        
+        console.log(`TTS requested for ${session.role} in room ${session.roomId}, language: ${targetLanguage}`);
+        
+        // Generate speech audio
+        const audioBuffer = await ttsService.generateSpeechSafe(text, targetLanguage);
+        
+        if (!audioBuffer) {
+          // TTS generation failed
+          socket.emit('tts_error', {
+            messageId,
+            message: 'TTS generation failed, please read the text',
+          });
+          return;
+        }
+        
+        // Stream audio to the requesting client
+        await ttsService.streamAudio(audioBuffer, (event, data) => {
+          socket.emit(event, {
+            ...data,
+            messageId,
+          });
+        });
+        
+        console.log(`TTS audio streamed to ${session.role} in room ${session.roomId}`);
+      } catch (error) {
+        console.error('Error handling TTS request:', error);
+        socket.emit('error', { 
+          message: error instanceof Error ? error.message : 'Failed to generate TTS' 
+        });
+      }
+    });
+    
+    // Handle audio_chunk event for streaming audio input
+    socket.on('audio_chunk', async (data: {
+      chunk: string; // Base64 encoded audio chunk
+      isLast: boolean;
+      language?: string;
+    }) => {
+      try {
+        const session = getSession(socket.id);
+        
+        if (!session) {
+          socket.emit('error', { message: 'No active session found' });
+          return;
+        }
+        
+        const { chunk, isLast, language } = data;
+        
+        // Validate chunk
+        if (!chunk) {
+          socket.emit('error', { message: 'Audio chunk is required' });
+          return;
+        }
+        
+        // Initialize audio buffer storage for this socket if not exists
+        if (!socket.data.audioBuffer) {
+          socket.data.audioBuffer = [];
+        }
+        
+        // Decode and append chunk to buffer
+        const chunkBuffer = Buffer.from(chunk, 'base64');
+        socket.data.audioBuffer.push(chunkBuffer);
+        
+        console.log(`Received audio chunk from ${session.role} in room ${session.roomId} (${chunkBuffer.length} bytes)`);
+        
+        // If this is the last chunk, process the complete audio
+        if (isLast) {
+          console.log(`Processing complete audio from ${session.role} in room ${session.roomId}`);
+          
+          // Combine all chunks into a single buffer
+          const completeAudioBuffer = Buffer.concat(socket.data.audioBuffer);
+          
+          // Clear the buffer
+          socket.data.audioBuffer = [];
+          
+          // Use session language if not provided
+          const targetLanguage = language || session.language || 'en';
+          
+          // Transcribe audio to text
+          const transcribedText = await sttService.transcribeAudioSafe(
+            completeAudioBuffer,
+            targetLanguage
+          );
+          
+          if (!transcribedText) {
+            // STT failed
+            socket.emit('stt_error', {
+              message: 'Audio transcription failed, please try again or use text input',
+            });
+            return;
+          }
+          
+          console.log(`Audio transcribed successfully: "${transcribedText.substring(0, 50)}..."`);
+          
+          // Emit transcription result to the sender
+          socket.emit('audio_transcribed', {
+            text: transcribedText,
+            language: targetLanguage,
+          });
+          
+          // Process the transcribed text as a normal text message
+          // This will go through the normal message flow with encryption, translation, etc.
+          const { roomId, role, doctorId } = session;
+          
+          // Get cipher key from room
+          const cipherKey = await exchangeKeys(roomId);
+          
+          // Get other participants in the room to determine target language
+          const roomSessions = getRoomSessions(roomId);
+          const otherParticipants = roomSessions.filter(s => s.socketId !== socket.id);
+          
+          // Translate message for each recipient's language
+          let translatedContent: string | undefined;
+          let finalTargetLanguage: string | undefined;
+          let translationError = false;
+          
+          // If there are recipients, translate to their language
+          if (otherParticipants.length > 0) {
+            const recipientLanguage = otherParticipants[0].language;
+            
+            if (recipientLanguage && recipientLanguage !== targetLanguage) {
+              finalTargetLanguage = recipientLanguage;
+              
+              // Translate the message
+              const translationResult = await translationService.translateMessageSafe(
+                transcribedText,
+                recipientLanguage,
+                targetLanguage
+              );
+              
+              translatedContent = translationResult.translation;
+              translationError = translationResult.error;
+              
+              console.log(`Audio message translated from ${targetLanguage} to ${recipientLanguage}`, 
+                translationError ? '(with error)' : '(success)');
+            }
+          }
+          
+          // Send message to database with both original and translated content
+          const message = await sendMessageService({
+            roomId,
+            role,
+            senderId: doctorId,
+            content: transcribedText,
+            cipherKey,
+            language: targetLanguage,
+            targetLanguage: finalTargetLanguage,
+            translatedContent,
+            isAudio: true, // Mark as audio-originated message
+          });
+          
+          // Check if there are online recipients
+          if (otherParticipants.length > 0) {
+            // Emit new_message to other participants in the room
+            socket.to(roomId).emit('new_message', {
+              id: message.id,
+              content: message.content,
+              translatedContent: message.translatedContent,
+              senderRole: message.senderRole,
+              senderId: message.senderId,
+              language: message.language,
+              targetLanguage: message.targetLanguage,
+              timestamp: message.timestamp,
+              isAudio: message.isAudio,
+              translationError,
+            });
+            
+            // Emit message_translated event to confirm translation
+            if (translatedContent && !translationError) {
+              socket.to(roomId).emit('message_translated', {
+                id: message.id,
+                translatedContent: message.translatedContent,
+                targetLanguage: message.targetLanguage,
+              });
+            }
+          } else {
+            // Queue message for offline delivery
+            if (!offlineMessageQueues.has(roomId)) {
+              offlineMessageQueues.set(roomId, []);
+            }
+            
+            offlineMessageQueues.get(roomId)!.push({
+              content: message.content,
+              senderRole: message.senderRole,
+              senderId: message.senderId,
+              language: message.language,
+              timestamp: message.timestamp,
+            });
+            
+            console.log(`Audio message queued for offline delivery in room ${roomId}`);
+          }
+          
+          // Confirm to sender
+          socket.emit('message_sent', {
+            id: message.id,
+            timestamp: message.timestamp,
+          });
+          
+          console.log(`Audio message sent in room ${roomId} by ${role}`);
+        }
+      } catch (error) {
+        console.error('Error processing audio chunk:', error);
+        
+        // Clear the audio buffer on error
+        if (socket.data.audioBuffer) {
+          socket.data.audioBuffer = [];
+        }
+        
+        socket.emit('error', { 
+          message: error instanceof Error ? error.message : 'Failed to process audio' 
         });
       }
     });
