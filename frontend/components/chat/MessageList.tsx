@@ -37,16 +37,16 @@ export default function MessageList({
   const prevScrollHeightRef = useRef<number>(0);
   const isInitialScrollRef = useRef(true);
 
-  // Auto-scroll to bottom on new messages (only if already near bottom)
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (scrollRef.current && bottomRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-
-      // Always scroll to bottom on initial load or when near bottom
-      if (isInitialScrollRef.current || isNearBottom) {
-        bottomRef.current.scrollIntoView({ behavior: isInitialScrollRef.current ? 'auto' : 'smooth' });
+      // Always scroll to bottom on initial load
+      if (isInitialScrollRef.current) {
+        bottomRef.current.scrollIntoView({ behavior: 'auto' });
         isInitialScrollRef.current = false;
+      } else {
+        // For new messages, always scroll to bottom with smooth animation
+        bottomRef.current.scrollIntoView({ behavior: 'smooth' });
       }
     }
   }, [messages]);

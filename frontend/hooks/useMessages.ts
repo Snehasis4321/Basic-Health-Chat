@@ -76,13 +76,17 @@ export function useMessages({
         }
 
         const data = await response.json();
-        const fetchedMessages: Message[] = data.messages.map((msg: any) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp),
-        }));
+        // Messages come from API in DESC order (newest first)
+        // Reverse to get chronological order (oldest first) for display
+        const fetchedMessages: Message[] = data.messages
+          .map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp),
+          }))
+          .reverse();
 
         if (append) {
-          // Prepend older messages (for lazy loading)
+          // Prepend older messages at the beginning (for lazy loading)
           setMessages((prev) => [...fetchedMessages, ...prev]);
         } else {
           // Replace messages (for initial load or refresh)
