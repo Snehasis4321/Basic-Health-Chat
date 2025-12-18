@@ -192,11 +192,20 @@ export function setupWebSocketServer(io: Server): void {
         // Join the Socket.io room
         socket.join(roomId);
         
-        // Emit room_joined to the joining user
+        // Get existing participants in the room (before adding current user)
+        const existingParticipants = getRoomSessions(roomId).filter(s => s.socketId !== socket.id);
+        const hasPatient = existingParticipants.some(s => s.role === 'patient');
+        const hasDoctor = existingParticipants.some(s => s.role === 'doctor');
+        
+        // Emit room_joined to the joining user with existing participants info
         socket.emit('room_joined', {
           roomId,
           role,
           doctorId,
+          participants: {
+            patient: hasPatient || role === 'patient',
+            doctor: hasDoctor || role === 'doctor',
+          },
         });
         
         // Notify other participants in the room

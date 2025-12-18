@@ -78,11 +78,16 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
     language,
     onRoomJoined: (data) => {
       console.log('Room joined:', data);
-      // Update participant status when we join
-      setParticipants((prev) => ({
-        ...prev,
-        [role]: true,
-      }));
+      // Update participant status from server data (includes existing participants)
+      if (data.participants) {
+        setParticipants(data.participants);
+      } else {
+        // Fallback: just mark ourselves as online
+        setParticipants((prev) => ({
+          ...prev,
+          [role]: true,
+        }));
+      }
     },
     onUserJoined: (data) => {
       console.log('User joined:', data);
