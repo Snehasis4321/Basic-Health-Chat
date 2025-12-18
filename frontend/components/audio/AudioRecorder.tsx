@@ -3,23 +3,75 @@
 import { useState, useRef, useCallback } from 'react';
 
 interface AudioRecorderProps {
-  onAudioData: (audioBlob: Blob) => void;
+  onAudioData?: (audioBlob: Blob) => void;
+  onTranscription?: (text: string) => void;
   onError?: (error: string) => void;
   disabled?: boolean;
+  language?: string;
 }
 
 export default function AudioRecorder({
   onAudioData,
+  onTranscription,
   onError,
   disabled = false,
+  language,
 }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  const transcribeAudio = useCallback(async (audioBlob: Blob) => {
+    setIsTranscribing(true);
+    
+    try {
+      // Create FormData for multipart upload
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
+      
+      if (language) {
+        formData.append('language', language);
+      }
+
+      // Get API URL from environment
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      
+      // Send to STT endpoint
+      const response = await fetch(`${apiUrl}/api/stt/transcribe`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Transcription failed' }));
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success || !data.text) {
+        throw new Error('Invalid transcription response');
+      }
+
+      // Call the transcription callback with the text
+      if (onTranscription) {
+        onTranscription(data.text);
+      }
+      
+      console.log('[AudioRecorder] Transcription successful:', data.text);
+    } catch (error) {
+      console.error('[AudioRecorder] Transcription error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to transcribe audio';
+      onError?.(errorMessage);
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [language, onTranscription, onError]);
 
   const startRecording = useCallback(async () => {
     try {
@@ -50,9 +102,18 @@ export default function AudioRecorder({
       };
 
       // Handle recording stop
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        onAudioData(audioBlob);
+        
+        // Call legacy callback if provided (for backward compatibility)
+        if (onAudioData) {
+          onAudioData(audioBlob);
+        }
+        
+        // If transcription callback is provided, transcribe the audio
+        if (onTranscription) {
+          await transcribeAudio(audioBlob);
+        }
         
         // Clean up
         if (streamRef.current) {
@@ -84,7 +145,7 @@ export default function AudioRecorder({
         streamRef.current = null;
       }
     }
-  }, [onAudioData, onError]);
+  }, [onAudioData, onTranscription, transcribeAudio, onError]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
@@ -126,6 +187,39 @@ export default function AudioRecorder({
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Show transcribing state
+  if (isTranscribing) {
+    return (
+      <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3">
+        {/* Transcribing indicator */}
+        <div className="flex items-center gap-2">
+          <svg
+            className="animate-spin h-5 w-5 text-blue-600 dark:text-blue-400"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            ></circle>
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
+          </svg>
+          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+            Transcribing audio...
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   if (isRecording) {
     return (

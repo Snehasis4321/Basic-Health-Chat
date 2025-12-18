@@ -5,16 +5,16 @@ import AudioRecorder from '../audio/AudioRecorder';
 
 interface MessageInputProps {
   onSendMessage: (content: string) => void;
-  onSendAudio?: (audioBlob: Blob) => void;
   disabled?: boolean;
   placeholder?: string;
+  language?: string;
 }
 
 export default function MessageInput({
   onSendMessage,
-  onSendAudio,
   disabled = false,
   placeholder = 'Type your message...',
+  language,
 }: MessageInputProps) {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -66,23 +66,31 @@ export default function MessageInput({
     }
   };
 
-  const handleAudioData = async (audioBlob: Blob) => {
-    if (onSendAudio) {
-      setSending(true);
-      try {
-        await onSendAudio(audioBlob);
-        setShowRecorder(false);
-      } catch (error) {
-        console.error('Error sending audio:', error);
-      } finally {
-        setSending(false);
+  const handleTranscription = (text: string) => {
+    // Populate the text input field with transcribed text
+    setMessage(text);
+    
+    // Hide the recorder and show the text input for review/editing
+    setShowRecorder(false);
+    
+    // Focus the textarea so user can immediately edit if needed
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        // Move cursor to end of text
+        textareaRef.current.setSelectionRange(text.length, text.length);
+        
+        // Auto-resize textarea to fit content
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
       }
-    }
+    }, 100);
   };
 
   const handleAudioError = (error: string) => {
     console.error('Audio recording error:', error);
     alert(`Audio recording error: ${error}`);
+    setShowRecorder(false);
   };
 
   const toggleRecorder = () => {
@@ -94,15 +102,16 @@ export default function MessageInput({
     return (
       <div className="space-y-2">
         <AudioRecorder
-          onAudioData={handleAudioData}
+          onTranscription={handleTranscription}
           onError={handleAudioError}
           disabled={disabled || sending}
+          language={language}
         />
         <button
           onClick={toggleRecorder}
           className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
         >
-          Switch to text input
+          Cancel and switch to text input
         </button>
       </div>
     );
@@ -110,30 +119,28 @@ export default function MessageInput({
 
   return (
     <div className="flex items-end gap-2">
-      {/* Microphone Button */}
-      {onSendAudio && (
-        <button
-          onClick={toggleRecorder}
-          disabled={disabled}
-          className="p-3 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
-          aria-label="Record audio message"
-          title="Record audio"
+      {/* Microphone Button for STT */}
+      <button
+        onClick={toggleRecorder}
+        disabled={disabled || sending}
+        className="p-3 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
+        aria-label="Record and transcribe audio"
+        title="Voice input (speech-to-text)"
+      >
+        <svg
+          className="w-5 h-5"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
         >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-            />
-          </svg>
-        </button>
-      )}
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+          />
+        </svg>
+      </button>
 
       {/* Text Input */}
       <div className="flex-1 relative">

@@ -201,28 +201,6 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
     sendMessage(content, language);
   };
 
-  const handleSendAudio = async (audioBlob: Blob) => {
-    if (!connected || !socket) {
-      console.error('Cannot send audio: not connected');
-      return;
-    }
-
-    try {
-      // Convert blob to array buffer for transmission
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      
-      // Emit audio chunks to server
-      socket.emit('audio_chunk', {
-        audio: arrayBuffer,
-        language: language,
-      });
-    } catch (error) {
-      console.error('Error sending audio:', error);
-    }
-  };
-
-
-
   return (
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -362,9 +340,9 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
       <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
         <MessageInput
           onSendMessage={handleSendMessage}
-          onSendAudio={handleSendAudio}
           disabled={!connected}
           placeholder={connected ? 'Type your message...' : 'Connecting...'}
+          language={language}
         />
       </footer>
     </div>
