@@ -237,12 +237,20 @@ export default function MessageList({
                     : getRoleColor(message.senderRole)
                 }`}
               >
+                {/* Translated text (primary display) */}
                 <div className="flex items-start gap-2">
-                  <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words flex-1">
-                    {displayContent}
-                  </p>
+                  <div className="flex-1">
+                    {message.translatedContent && message.content !== message.translatedContent && (
+                      <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                        Translated ({message.targetLanguage || 'auto'}):
+                      </p>
+                    )}
+                    <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words">
+                      {displayContent}
+                    </p>
+                  </div>
                   
-                  {/* Audio Player Button */}
+                  {/* Audio Player Button for translated text */}
                   {onRequestTTS && (
                     <AudioPlayer
                       messageId={message.id}
@@ -254,17 +262,31 @@ export default function MessageList({
                   )}
                 </div>
 
-                {/* Show original text if translated (for doctors) */}
-                {currentRole === 'doctor' &&
-                  message.translatedContent &&
+                {/* Show original text if different from translation */}
+                {message.translatedContent &&
                   message.content !== message.translatedContent && (
-                    <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                        Original ({message.language}):
-                      </p>
-                      <p className="text-xs text-gray-700 dark:text-gray-300 italic">
-                        {message.content}
-                      </p>
+                    <div className="mt-3 pt-3 border-t border-gray-300/50 dark:border-gray-600/50">
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1">
+                          <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                            Original ({message.language}):
+                          </p>
+                          <p className="text-xs text-gray-700 dark:text-gray-300 italic whitespace-pre-wrap break-words">
+                            {message.content}
+                          </p>
+                        </div>
+                        
+                        {/* Audio Player Button for original text */}
+                        {onRequestTTS && (
+                          <AudioPlayer
+                            messageId={`${message.id}-original`}
+                            text={message.content}
+                            language={message.language}
+                            onRequestTTS={onRequestTTS}
+                            size="sm"
+                          />
+                        )}
+                      </div>
                     </div>
                   )}
               </div>

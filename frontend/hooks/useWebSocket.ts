@@ -57,6 +57,32 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
+  // Store callbacks in refs to avoid recreating initializeSocket
+  const callbacksRef = useRef({
+    onRoomJoined,
+    onUserJoined,
+    onUserLeft,
+    onNewMessage,
+    onMessageTranslated,
+    onCipherKeyExchange,
+    onCipherKeyInvalidated,
+    onError,
+  });
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    callbacksRef.current = {
+      onRoomJoined,
+      onUserJoined,
+      onUserLeft,
+      onNewMessage,
+      onMessageTranslated,
+      onCipherKeyExchange,
+      onCipherKeyInvalidated,
+      onError,
+    };
+  }, [onRoomJoined, onUserJoined, onUserLeft, onNewMessage, onMessageTranslated, onCipherKeyExchange, onCipherKeyInvalidated, onError]);
+
   // Initialize socket connection
   const initializeSocket = useCallback(() => {
     if (socketRef.current?.connected) {
@@ -119,28 +145,28 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     // Room event handlers
     newSocket.on('room_joined', (data) => {
       console.log('Room joined:', data);
-      onRoomJoined?.(data);
+      callbacksRef.current.onRoomJoined?.(data);
     });
 
     newSocket.on('user_joined', (data) => {
       console.log('User joined:', data);
-      onUserJoined?.(data);
+      callbacksRef.current.onUserJoined?.(data);
     });
 
     newSocket.on('user_left', (data) => {
       console.log('User left:', data);
-      onUserLeft?.(data);
+      callbacksRef.current.onUserLeft?.(data);
     });
 
     // Message event handlers
     newSocket.on('new_message', (data) => {
       console.log('New message received:', data);
-      onNewMessage?.(data);
+      callbacksRef.current.onNewMessage?.(data);
     });
 
     newSocket.on('message_translated', (data) => {
       console.log('Message translated:', data);
-      onMessageTranslated?.(data);
+      callbacksRef.current.onMessageTranslated?.(data);
     });
 
     newSocket.on('message_sent', (data) => {
@@ -150,23 +176,37 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     // Cipher key event handlers
     newSocket.on('cipher_key_exchange', (data) => {
       console.log('Cipher key exchanged');
-      onCipherKeyExchange?.(data);
+      callbacksRef.current.onCipherKeyExchange?.(data);
     });
 
     newSocket.on('cipher_key_invalidated', (data) => {
       console.log('Cipher key invalidated:', data.reason);
-      onCipherKeyInvalidated?.(data);
+      callbacksRef.current.onCipherKeyInvalidated?.(data);
     });
 
     // Error handler
     newSocket.on('error', (err) => {
       console.error('WebSocket error:', err);
-      setError(err.message || 'An error occurred');
-      onError?.(err);
+      const errorMessage = err.message || 'An error occurred';
+      setError(errorMessage);
+      callbacksRef.current.onError?.(err);
+    });
+
+    // Handle specific error events
+    newSocket.on('stt_error', (data) => {
+      console.error('STT error:', data);
+      setError(data.message || 'Audio transcription failed');
+      callbacksRef.current.onError?.(data);
+    });
+
+    newSocket.on('tts_error', (data) => {
+      console.error('TTS error:', data);
+      setError(data.message || 'Text-to-speech generation failed');
+      callbacksRef.current.onError?.(data);
     });
 
     setSocket(newSocket);
-  }, [roomId, role, token, language, onRoomJoined, onUserJoined, onUserLeft, onNewMessage, onMessageTranslated, onCipherKeyExchange, onCipherKeyInvalidated, onError]);
+  }, [roomId, role, token, language]);
 
   // Reconnection logic with exponential backoff
   const attemptReconnect = useCallback(() => {

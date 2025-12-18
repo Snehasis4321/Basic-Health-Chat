@@ -627,6 +627,42 @@ export function setupWebSocketServer(io: Server): void {
       }
     });
     
+    // Handle update_language event
+    socket.on('update_language', (data: { language: string }) => {
+      try {
+        const session = getSession(socket.id);
+        
+        if (!session) {
+          socket.emit('error', { message: 'No active session found' });
+          return;
+        }
+        
+        const { language } = data;
+        
+        // Validate language
+        if (!language || typeof language !== 'string') {
+          socket.emit('error', { message: 'Invalid language' });
+          return;
+        }
+        
+        // Update session language
+        session.language = language;
+        sessions.set(socket.id, session);
+        
+        console.log(`${session.role} updated language to ${language} in room ${session.roomId}`);
+        
+        // Confirm language update
+        socket.emit('language_updated', {
+          language,
+        });
+      } catch (error) {
+        console.error('Error updating language:', error);
+        socket.emit('error', { 
+          message: error instanceof Error ? error.message : 'Failed to update language' 
+        });
+      }
+    });
+    
     // Handle leave_room event
     socket.on('leave_room', async () => {
       try {

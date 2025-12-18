@@ -5,6 +5,7 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { useMessages } from '@/hooks/useMessages';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
+import LanguageSelector from './LanguageSelector';
 
 interface ChatRoomProps {
   roomId: string;
@@ -27,8 +28,15 @@ interface Message {
 }
 
 export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps) {
-  const [language, setLanguage] = useState('en');
+  // Initialize language from session storage or default to 'en'
+  const [language, setLanguage] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('preferredLanguage') || 'en';
+    }
+    return 'en';
+  });
   const [cipherKey, setCipherKey] = useState<string | null>(null);
+  const [dismissedError, setDismissedError] = useState(false);
 
   // Fetch messages with lazy loading support
   const {
@@ -98,6 +106,7 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
     },
     onError: (error) => {
       console.error('WebSocket error:', error);
+      // Error is already handled by useWebSocket hook and displayed in the UI
     },
   });
 
@@ -109,9 +118,27 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
     }
   }, [roomId]);
 
+  // Reset dismissed error when error changes
+  useEffect(() => {
+    if (wsError) {
+      setDismissedError(false);
+    }
+  }, [wsError]);
+
   const handleLeave = () => {
     leaveRoom();
     onLeave?.();
+  };
+
+  const handleLanguageChange = (newLanguage: string) => {
+    setLanguage(newLanguage);
+    // Store in session storage
+    sessionStorage.setItem('preferredLanguage', newLanguage);
+    
+    // Update language preference on server via WebSocket
+    if (connected && socket) {
+      socket.emit('update_language', { language: newLanguage });
+    }
   };
 
   const handleSendMessage = (content: string) => {
@@ -190,18 +217,12 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Language Selector - Placeholder for now */}
-            <select
+            {/* Language Selector */}
+            <LanguageSelector
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              className="text-sm px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="en">English</option>
-              <option value="es">Español</option>
-              <option value="fr">Français</option>
-              <option value="de">Deutsch</option>
-              <option value="zh">中文</option>
-            </select>
+              onChange={handleLanguageChange}
+              disabled={!connected}
+            />
 
             {!connected && !connecting && (
               <button
@@ -228,13 +249,34 @@ export default function ChatRoom({ roomId, role, token, onLeave }: ChatRoomProps
         </div>
 
         {/* Error Banner */}
-        {wsError && (
+        {wsError && !dismissedError && (
           <div className="mt-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-sm text-red-800 dark:text-red-300">{wsError}</p>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-1">
+                <svg className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="flex-1">
+                  <p className="text-sm text-red-800 dark:text-red-300">{wsError}</p>
+                  {!connected && !connecting && (
+                    <button
+                      onClick={reconnect}
+                      className="mt-1 text-xs text-red-700 dark:text-red-400 hover:text-red-900 dark:hover:text-red-200 underline"
+                    >
+                      Try reconnecting
+                    </button>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setDismissedError(true)}
+                className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
+                aria-label="Dismiss error"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
           </div>
         )}

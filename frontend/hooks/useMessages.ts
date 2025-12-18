@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface Message {
   id: string;
@@ -44,11 +44,15 @@ export function useMessages({
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
 
+  // Use ref to track loading state to avoid dependency issues
+  const loadingRef = useRef(false);
+
   // Fetch messages from API
   const fetchMessages = useCallback(
     async (currentOffset: number, append: boolean = false) => {
-      if (loading) return;
+      if (loadingRef.current) return;
 
+      loadingRef.current = true;
       setLoading(true);
       setError(null);
 
@@ -92,10 +96,11 @@ export function useMessages({
         console.error('Error fetching messages:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch messages');
       } finally {
+        loadingRef.current = false;
         setLoading(false);
       }
     },
-    [roomId, token, limit, loading]
+    [roomId, token, limit]
   );
 
   // Initial load
@@ -108,10 +113,10 @@ export function useMessages({
 
   // Load more messages (for lazy loading)
   const loadMore = useCallback(() => {
-    if (!loading && hasMore) {
+    if (!loadingRef.current && hasMore) {
       fetchMessages(offset, true);
     }
-  }, [fetchMessages, offset, loading, hasMore]);
+  }, [fetchMessages, offset, hasMore]);
 
   // Add a new message (from WebSocket)
   const addMessage = useCallback((message: Message) => {
